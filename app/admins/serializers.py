@@ -40,15 +40,21 @@ class AdminSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     """The serializer to see other admins"""
     nation = serializers.SerializerMethodField()
+    last_log = serializers.SerializerMethodField()
     class Meta:
         model = get_user_model()
-        fields = ('id', 'username', 'name', 'address', 'phone', 'postal_code', 'birth_date', 
-                  'email', 'is_staff', 'title', 'nationality', 'nation', 'last_login'
+        fields = ('id', 'username', 'name', 'address', 'phone', 'postal_code', 'birth_date', 'is_active',
+                  'email', 'is_staff', 'title', 'nationality', 'nation', 'last_log'
         )
 
     def get_nation(self, obj):
         return str(obj.nationality)
 
+    def get_last_log(self, obj):
+        if obj.last_login:
+            return str(obj.last_login.year) + '/' + str(obj.last_login.month) + '/' + str(obj.last_login.day) + '   ' + str(obj.last_login.hour) + ':' + str(obj.last_login.minute)
+        else:
+            return None
 
 class AuthTokenSerializer(serializers.Serializer):
     """The Serializer class for the admin authentication object"""

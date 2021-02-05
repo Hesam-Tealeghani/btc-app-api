@@ -50,7 +50,7 @@ class ManageUserView(generics.RetrieveUpdateAPIView):
 
 class ListUsersView(generics.ListAPIView):
     """The viewset to handle admins listing"""
-    serializer_class = AdminSerializer
+    serializer_class = ProfileSerializer
     authentication_classes = (authentication.TokenAuthentication,)
     permission_classes = (permissions.IsAdminUser,)
     queryset = get_user_model().objects.all()

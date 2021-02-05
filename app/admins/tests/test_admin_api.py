@@ -4,7 +4,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from admins.serializers import AdminSerializer
+from admins.serializers import AdminSerializer, ProfileSerializer
 
 ADMIN_LIST_URL = reverse('admins:list')
 CREATE_ADMIN_URL = reverse('admins:create')
@@ -200,7 +200,7 @@ class PrivateAdminApiTest(TestCase):
         response = self.client.get(ADMIN_LIST_URL)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         admins = get_user_model().objects.all().order_by('name')
-        adminserialized = AdminSerializer(admins, many=True)
+        adminserialized = ProfileSerializer(admins, many=True)
         self.assertEqual(response.data, adminserialized.data)
         
 

@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -318,3 +319,12 @@ class ModelTest(TestCase):
 
         self.assertEqual(mid_revenue.contract, contract)
         self.assertEqual(mid_revenue.profit, 4.00)
+
+    @patch('uuid.uuid4')
+    def test_user_image_file_name(self, mock_uuid):
+        """Test that the image of the profile is uploaded in the current location"""
+        uuid = 'test-uuid'
+        mock_uuid.return_value = uuid
+        file_path = models.profile_image_path(None, 'MyImage.jpg')
+        excepted_path = f'uploads/user/{uuid}.jpg'
+        self.assertEqual(file_path, excepted_path)

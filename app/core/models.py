@@ -2,11 +2,19 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.conf import settings
 from django.core.exceptions import ValidationError
+import uuid
+import os
 
 
 def percent_validator(data):
     if data > 100 or data < 0:
         raise ValidationError('Invalid Shareholder')
+
+def profile_image_path(instance, file_name):
+    """Generate the new profile name"""
+    extension = file_name.split('.')[-1]
+    filename = f'{uuid.uuid4()}.{extension}'
+    return os.path.join('uploads/user/', filename)
 
 
 class UserManager(BaseUserManager):
@@ -40,6 +48,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     postal_code = models.CharField(max_length=25, blank=True, null=True, default=None)
     birth_date = models.DateField(auto_now=False, auto_now_add=False, blank=True, null=True, default=None)
     email = models.EmailField(max_length=254)
+    image = models.ImageField(upload_to=profile_image_path, null=True)
     nationality = models.ForeignKey('Country', 
                                     on_delete=models.SET_NULL, blank=True, null=True, default=None, 
                                     related_name='admin_nationalities')
