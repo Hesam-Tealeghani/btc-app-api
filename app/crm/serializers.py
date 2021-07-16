@@ -1,7 +1,41 @@
 from rest_framework import serializers
 from core.models import Country, POSCompany, PosModel, POS, VirtualService, MarketingGoal, \
-     Costumer, Contract, ContractPOS, ContractService, PaperRoll, Payment, MIDRevenue
+     Costumer, Contract, ContractPOS, ContractService, PaperRoll, Payment, MIDRevenue, TradingAddress
 from django.core.exceptions import ValidationError
+from datetime import datetime
+from admins.serializers import CreatingAdminSerializer
+
+
+def dateToString(date):
+    """Change the date format"""
+    year = date.year
+    month = date.month 
+    day = date.day
+
+    if month < 10:
+        month = '0' + str(month)
+
+    if day < 10:
+        day = '0' + str(day)
+
+    return str(year) + '-' + str(month) + '-' + str(day)
+
+
+def dateTimeToString(datetime):
+    """Change the date time format"""
+    year = datetime.year
+    month = datetime.month
+    day = datetime.day
+    hour = datetime.hour
+    minute = datetime.minute
+
+    if month < 10:
+        month = '0' + str(month)
+
+    if day < 10:
+        month = '0' + str(day)
+
+    return str(year) + '-' + str(month) + '-' + str(day) + '   ' + str(hour) + ':' + str(minute)
 
 
 class CountrySerializer(serializers.ModelSerializer):
@@ -16,6 +50,14 @@ class CountrySerializer(serializers.ModelSerializer):
                 'read_only': True
             }
         }
+
+
+class NationalitySerializer(serializers.ModelSerializer):
+    """The minima serializer for other models using nationality field"""
+    class Meta:
+        model = Country
+        fields = ['id', 'name', 'abreviation']
+        read_only_fields = ['id', 'name', 'abreviation']
 
 
 class POSCompanySerializer(serializers.ModelSerializer):
@@ -42,6 +84,7 @@ class POSCompanySerializer(serializers.ModelSerializer):
 
 class PosModelSerializer(serializers.ModelSerializer):
     """The POS model serializer"""
+    company = POSCompanySerializer(read_only=True)
     class Meta:
         model = PosModel
         fields = ('id', 'name', 'hardware_cost', 'software_cost','price', 'created_by', 'company')
@@ -57,10 +100,32 @@ class PosModelSerializer(serializers.ModelSerializer):
 
 class PosSerializer(serializers.ModelSerializer):
     """The pos serializer"""
+    created_by = CreatingAdminSerializer(read_only=True)
+    created_at = serializers.SerializerMethodField()
+    type_name = serializers.SerializerMethodField()
+    model = PosModelSerializer(read_only=True)
+    contract_id = serializers.SerializerMethodField()
     class Meta:
         model = POS
-        fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'created_by']
+        fields = ['id', 'created_at', 'created_by', 'serial_number', 'type', 'note',
+                  'ownership', 'is_active', 'status', 'type_name', 'model', 'contract_id']
+        read_only_fields = ['id', 'created_at', 'created_by', 'contract_id']
+    
+    def get_created_at(self, obj):
+        return dateToString(obj.created_at)
+
+    def get_type_name(self,obj):
+        return obj.get_type_display()
+
+    def get_contract_id(self, obj):
+        todayDate = datetime.now().date()
+        for i in ContractPOS.objects.filter(pos=obj.id):
+            contract = Contract.objects.get(pk=i.contract.id)
+            startDate = contract.live_date
+            endDate = contract.end_date
+            if startDate <= todayDate <= endDate:
+                return contract.id
+        return 0
 
 
 class ServiceSerializer(serializers.ModelSerializer):
@@ -73,18 +138,44 @@ class ServiceSerializer(serializers.ModelSerializer):
 
 class GoalSerializer(serializers.ModelSerializer):
     """The Marketing goal serializer"""
+    updated_at = serializers.SerializerMethodField()
+    created_at = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    last_update = CreatingAdminSerializer(read_only=True)
     class Meta:
         model = MarketingGoal
         fields = ['id', 'trading_name', 'created_at', 'status', 'last_update', 'updated_at', 'business_field']
-        read_only_fields = ['id', 'created_at', 'created_by', 'last_update', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'last_update', 'updated_at']
+    
+    def get_updated_at(self, obj):
+        return dateToString(obj.updated_at)
+
+    def get_created_at(self, obj):
+        return dateToString(obj.created_at)
+    
+    def get_status(self, obj):
+        return obj.get_status_display()
 
 
 class GoalDetailSerializer(serializers.ModelSerializer):
     """The Serializer for goal's Details"""
+    updated_at = serializers.SerializerMethodField()
+    created_at = serializers.SerializerMethodField()
+    last_update = CreatingAdminSerializer(read_only=True)
+    status_name = serializers.SerializerMethodField()
     class Meta:
         model = MarketingGoal
-        fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'created_by']
+        fields = ['id', 'trading_name', 'created_at', 'status', 'last_update', 'updated_at', 'business_field', 'legal_name', 
+                  'land_line', 'trading_address', 'postal_code', 'decision_maker', 'mobile', 'status_name',
+                  'email', 'website', 'note']
+        read_only_fields = ['id', 'created_at', 'last_update', 'updated_at', 'status_name']
+
+    def get_updated_at(self, obj):
+        return dateToString(obj.updated_at)
+    def get_created_at(self, obj):
+        return dateToString(obj.created_at)
+    def get_status_name(self, obj):
+        return obj.get_status_display()
 
 
 class CostumerMiniSerializer(serializers.ModelSerializer):
@@ -94,12 +185,54 @@ class CostumerMiniSerializer(serializers.ModelSerializer):
         fields = ['id', 'legal_name', 'trading_name']
         read_only_fields = ['id']
     
+
+class TradingAddressSerializer(serializers.ModelSerializer):
+    """The serializer for managing Costumers' Trading Adresses"""
+    class Meta:
+        model = TradingAddress
+        fields = ['address', 'id']
+        read_only_fields = ['id']
+
+
 class CostumerSerializer(serializers.ModelSerializer):
     """The serializer for managing Costumers"""
+    country = NationalitySerializer()
+    partner_nationality = NationalitySerializer()
+    director_nationality = NationalitySerializer()
+    registered_country = NationalitySerializer()
+    trading_addresses = serializers.SerializerMethodField()
+    business_type = serializers.SerializerMethodField()
+    legal_entity = serializers.SerializerMethodField()
     class Meta:
         model = Costumer
-        fields = '__all__'
-        read_only_fields = ['id', 'created_by', 'created_at']
+        exclude = ['created_by', 'created_at', 'updated_at', 'last_updated_by', 'pob', 'kyc1_id', 
+                   'kyc2_address_proof', 'kyb_peremises_photo', 'kyb_trading_address_proof'
+                   ]
+        read_only_fields = ['id']
+    
+    def get_trading_addresses(self, obj):
+        tradingAddresses = TradingAddress.objects.filter(costumer=obj)
+        if tradingAddresses.exists():
+            serializer = TradingAddressSerializer(tradingAddresses, many=True)
+            return serializer.data
+        else:
+            return []
+    
+    def get_business_type(self, obj):
+        return obj.get_business_type_display()
+    
+    def get_legal_entity(self, obj):
+        return obj.get_legal_entity_display()
+
+
+class CustomerCreateSerializer(serializers.ModelSerializer):
+    """To Manage Creating Customers"""
+    class Meta:
+        model = Costumer
+        exclude = ['created_at', 'updated_at', 'last_updated_by', 'pob', 'kyc1_id', 
+                   'kyc2_address_proof', 'kyb_peremises_photo', 'kyb_trading_address_proof'
+                   ]
+        read_only_fields = ['id', 'created_by']
 
 
 class ContractSerializer(serializers.ModelSerializer):
@@ -112,21 +245,24 @@ class ContractSerializer(serializers.ModelSerializer):
 
 class ContractDetailSerializer(serializers.ModelSerializer):
     """The Serializer for managing Contracts and showin costumers"""
+    created_at = serializers.SerializerMethodField()
     costumer = CostumerSerializer(read_only=True)
     class Meta:
         model = Contract
-        fields = '__all__'
-        read_only_fields = ['id', 'created_by', 'created_at']
+        exclude = ['created_by']
+        read_only_fields = ['id', 'created_at']
+
+    def get_created_at(self, obj):
+        return dateToString(obj.created_at)
 
 
 class ContractListSerializer(serializers.ModelSerializer):
     """The serializer for listing contracts"""
-    legal_name = serializers.SerializerMethodField()
-    trading_name = serializers.SerializerMethodField()
+    costumer = CostumerSerializer(read_only=True)
     business_type = serializers.SerializerMethodField()
     class Meta:
         model = Contract
-        fields = ['id', 'm_id', 'start_date', 'start_date', 'end_date', 'legal_name', 'trading_name', 'business_type']
+        fields = ['id', 'm_id', 'live_date', 'end_date', 'costumer', 'business_type']
 
     def get_legal_name(self, obj):
         return obj.costumer.legal_name
@@ -135,51 +271,63 @@ class ContractListSerializer(serializers.ModelSerializer):
         return obj.costumer.trading_name
     
     def get_business_type(self, obj):
-        return obj.costumer.business_type
+        return obj.costumer.get_business_type_display()
        
+
+class PosConSerializer(serializers.ModelSerializer):
+    """The pos serializer fro contracts"""
+    model_name = serializers.SerializerMethodField()
+    type_name = serializers.SerializerMethodField()
+    company_name = serializers.SerializerMethodField()
+    class Meta:
+        model = POS
+        fields = ['id', 'serial_number', 'type_name', 'model_name', 'company_name']
+        read_only_fields = ['id', 'created_at', 'created_by']
+    
+    def get_type_name(self,obj):
+        return obj.get_type_display()
+    
+    def get_model_name(self, obj):
+        return obj.model.name
+    
+    def get_company_name(self, obj):
+        return obj.model.company.name
 
 
 class ContractPosSerializer(serializers.ModelSerializer):
     """To Provide poses of a contract"""
-    type = serializers.SerializerMethodField()
-    company = serializers.SerializerMethodField()
-    pos_model = serializers.SerializerMethodField()
-    serial_number = serializers.SerializerMethodField()
+    pos_detail = serializers.SerializerMethodField()
     class Meta:
         model = ContractPOS
-        fields = ['pos', 'id', 'price', 'hardware_cost', 'software_cost', 'type', 'company', 'pos_model', 'serial_number']
+        fields = ['pos', 'id', 'price', 'hardware_cost', 'software_cost', 'pos_detail']
         read_only_fields = ['id']
-
-    def get_type(self, obj):
-        return obj.pos.type
     
-    def get_company(self, obj):
-        return str(obj.pos.model.company)
+    def get_pos_detail(self, obj):
+        return PosSerializer(obj.pos).data
 
-    def get_pos_model(self, obj):
-        return str(obj.pos.model)
-    
-    def get_serial_number(self, obj):
-        return str(obj.pos)
 
 class ContractServiceSerializer(serializers.ModelSerializer):
     """To Provide services of a contract"""
-    name = serializers.SerializerMethodField()
+    service_name = serializers.SerializerMethodField()
     class Meta:
         model = ContractService
-        fields = ['service', 'id', 'price', 'cost', 'name']
+        fields = ['service', 'id', 'price', 'cost', 'service_name']
         read_only_fields = ['id']
-
-    def get_name(self, obj):
-        return str(obj.service)
+    
+    def get_service_name(self, obj):
+        return obj.service.name
 
 
 class CostumerPaperrollSerializer(serializers.ModelSerializer):
     """To Manage paper rolls of a costumer"""
+    date = serializers.SerializerMethodField()
     class Meta:
         model = PaperRoll
-        fields = ['amount', 'cost', 'price', 'direct_debit_cost', 'ordered_date', 'id']
+        fields = ['amount', 'cost', 'price', 'direct_debit_cost', 'ordered_date', 'id', 'date']
         read_only_fields = ['id']
+    
+    def get_date(self, obj):
+        return dateTimeToString(obj.ordered_date)
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -196,3 +344,17 @@ class MIDRevenueSerializer(serializers.ModelSerializer):
         model = MIDRevenue
         fields = ['id', 'income', 'profit', 'date']
         read_only_fields = ['id']
+
+
+class CustomerFileSerializer(serializers.ModelSerializer):
+    """To manage uploading files"""
+    class Meta:
+        model = Costumer
+        fields = ['pob', 'kyc1_id', 'kyc2_address_proof', 'kyb_peremises_photo', 'kyb_trading_address_proof']
+
+
+class ContractFileSerializer(serializers.ModelSerializer):
+    """To manage uploading files"""
+    class Meta:
+        model = Contract
+        fields = ['acquire_application', 'financial_report', 'vat_return', 'fd_consent', 'credit_search']

@@ -1,3 +1,6 @@
+import tempfile
+import os
+from PIL import Image
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.urls import reverse
@@ -10,6 +13,10 @@ ADMIN_LIST_URL = reverse('admins:list')
 CREATE_ADMIN_URL = reverse('admins:create')
 MY_PROFILE_URL = reverse('admins:me')
 TOKEN_URL = reverse('admins:token')
+
+def image_upload_url(admin_id):
+    """return url for the admin image upload"""
+    return reverse('admins:admin-upload-image', args=[admin_id])
 
 def create_admin(**params):
     return get_user_model().objects.create_user(**params)
@@ -301,3 +308,38 @@ class PrivateSuperUserUpdates(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         sample_admin.refresh_from_db()
         self.assertEqual(sample_admin.is_active, True)
+
+
+class AdminImageUploadTest(TestCase):
+    """Test for uploadin images"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = create_super_user(
+            username='testsuper',
+            name='test super',
+            email='super@admin.com',
+            password='adminsuper1234admin',
+            phone='12345678',
+            postal_code='123321',
+            birth_date='2000-01-01',
+            address='world, world',
+            title='tester'
+        )
+        self.client.force_authenticate(self.admin)
+
+    def tearDown(self):
+        self.admin.image.delete()
+    
+    # def test_upload_image(self):
+    #     """Test Uploading an image to profile of admin"""
+    #     url = image_upload_url(self.admin.id)
+    #     with tempfile.NamedTemporaryFile(suffix='.jpg') as ntf:
+    #         img = Image.new('R GB', (10, 10))
+    #         img.save(ntf, format='JPEG')
+    #         ntf.seek(0)
+    #         response = self.client.post(url, {'image': ntf}, format='multipart')
+    #         self.admin.refresh_from_db()
+    #         self.assertEqual(response.status_code, status.HTTP_200_OK)
+    #         self.assertIn('image', response.data)
+    #         self.assertTrue(os.path.exists(self.admin.image.path))

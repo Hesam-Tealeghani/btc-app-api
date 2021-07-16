@@ -15,7 +15,7 @@ class UserAdmin(BaseUserAdmin):
         }),
         (_('Personal Information'), {
             "fields": (
-                'name', 'phone', 'postal_code', 'email', 'address', 'title', 'nationality'
+                'name', 'phone', 'postal_code', 'email', 'address', 'title', 'nationality', 'image'
             )
         }),
         (_('Permissions'), {

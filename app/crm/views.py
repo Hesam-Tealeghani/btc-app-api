@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 
 from core import models
 from crm import serializers
+from datetime import datetime
 
 
 class BaseViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.CreateModelMixin, mixins.DestroyModelMixin):
@@ -39,7 +40,7 @@ class POSCompanyViewSet(BaseViewSet):
         return self.queryset.order_by('name')
 
 
-class POSModelListView(generics.ListAPIView, mixins.DestroyModelMixin):
+class POSModelViewset(BaseViewSet, mixins.UpdateModelMixin):
     """Manage pos models"""
     serializer_class = serializers.PosModelSerializer
     queryset = models.PosModel.objects.all()
@@ -49,19 +50,11 @@ class POSModelListView(generics.ListAPIView, mixins.DestroyModelMixin):
     def filter_queryset(self, queryset):
         """To order by models"""
         return self.queryset.order_by('name')
-
-
-class POSModelCreateView(generics.CreateAPIView):
-    """Manage pos models"""
-    serializer_class = serializers.PosModelSerializer
-    authentication_classes = (TokenAuthentication,)
-    permission_classes = (IsAuthenticated,)
     
     def perform_create(self, serializer):
-        """To assign the admin and the company"""
-        pk = self.kwargs.get('pk')
-        company = get_object_or_404(models.POSCompany, pk=pk)
-        serializer.save(created_by=self.request.user, company=company)
+        """To assing the pos Company"""
+        pos_company = get_object_or_404(models.POSCompany, pk=self.request.data['company'])
+        serializer.save(company=pos_company)
 
 
 class PosModelCompanyList(generics.ListAPIView):
@@ -84,11 +77,12 @@ class PosViewSet(BaseViewSet, mixins.UpdateModelMixin):
 
     def perform_create(self, serializer):
         """To assign the admin"""
-        serial_number_length = serializer.validated_data['model'].company.serial_number_length
+        posModel = get_object_or_404(models.PosModel, pk=self.request.data['model'])
+        serial_number_length = posModel.company.serial_number_length
         if len(serializer.validated_data['serial_number']) != serial_number_length:
             raise ValidationError('Invalid Serial Number Length')
         else:
-            serializer.save(created_by=self.request.user)
+            serializer.save(created_by=self.request.user, model=posModel)
 
     def filter_queryset(self, queryset):
         """To order by serial number"""
@@ -101,6 +95,28 @@ class PosViewSet(BaseViewSet, mixins.UpdateModelMixin):
             raise ValidationError('Invalid Serial Number Length')
         else:
             return super().partial_update(request, pk)
+    
+    def update_items_status(self):
+        """To Update status of poses (availablity)"""
+        for i in models.POS.objects.all():
+            found = False
+            todayDate = datetime.now().date()
+            for j in models.ContractPOS.objects.filter(pos=i.id):
+                contract = models.Contract.objects.get(pk=j.contract.id)
+                startDate = contract.live_date
+                endDate = contract.end_date
+                if startDate <= todayDate <= endDate:
+                    i.status = False
+                    found = True
+                    break
+            if not(found):
+                i.status = True
+            i.save()
+
+    def list(self, request, *args, **kwargs):
+        """To update items everytime in list returns"""
+        self.update_items_status()
+        return super().list(request, *args, **kwargs)
 
 
 class ServiceViewSet(BaseViewSet, mixins.UpdateModelMixin):
@@ -213,7 +229,7 @@ class GoalViewSet(viewsets.ModelViewSet):
     
     def get_serializer_class(self):
         """Return appropriate Serializer"""
-        if self.action == "retrieve" or self.action == "update":
+        if self.action == "retrieve" or self.action == "update" or self.action == "create" or self.action == "partial_update":
             return serializers.GoalDetailSerializer
         return self.serializer_class
     
@@ -230,9 +246,9 @@ class CostumerListViewSet(generics.ListAPIView):
     queryset = models.Costumer.objects.all()
 
 
-class CostumerViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.UpdateModelMixin):
+class CostumerViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.UpdateModelMixin, mixins.RetrieveModelMixin):
     """The viewset to handle creating and updating Costumers"""
-    serializer_class = serializers.CostumerSerializer
+    serializer_class = serializers.CustomerCreateSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAuthenticated,)
     queryset = models.Costumer.objects.all()
@@ -244,6 +260,13 @@ class CostumerViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.U
     def perform_update(self, serializer):
         """To assign the user who has updated"""
         serializer.save(last_update_by=self.request.user)
+    
+    def get_serializer_class(self):
+        """To assign the right serializer class"""
+        if self.action == 'retrieve':
+            return serializers.CostumerSerializer
+        else:
+            return self.serializer_class
 
 
 class ContractViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.UpdateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin):
@@ -355,3 +378,120 @@ class MIDViewSet(generics.ListCreateAPIView, generics.DestroyAPIView):
         contract_id = self.kwargs.get('pk')
         contract = get_object_or_404(models.Contract, pk=contract_id)
         serializer.save(created_by=self.request.user, contract=contract)
+
+
+class ServiceAvailability(APIView):
+    """The view to change the service availability"""
+    serializer_class = serializers.ServiceSerializer
+    authentication_classes = (TokenAuthentication,)
+    prermission_classes = (IsAuthenticated,)
+
+    def post(self, request, pk):
+        service = get_object_or_404(models.VirtualService, pk=pk)
+        service.availability = not(service.availability)
+        service.save()
+        return Response(status=status.HTTP_200_OK)
+
+
+class CountryCoverage(APIView):
+    """The view to change the country is being covered"""
+    serializer_class = serializers.CountrySerializer    
+    authentication_classes = (TokenAuthentication,)
+    prermission_classes = (IsAuthenticated,)
+
+    def post(self, request, pk):
+        country = get_object_or_404(models.Country, pk=pk)
+        country.is_covered = not(country.is_covered)
+        country.save()
+        return Response(status=status.HTTP_200_OK)
+
+
+class TradingAddressCreate(APIView):
+    """To create multiple addresses for one customer"""
+    serializer_class = serializers.TradingAddressSerializer
+    authentication_classes = (TokenAuthentication,)
+    prermission_classes = (IsAuthenticated,)
+
+    def post(self, request, pk):
+        customer = get_object_or_404(models.Costumer, pk=pk)
+        for i in request.data:
+            address = models.TradingAddress.objects.create(address=i['address'], costumer=customer)
+            address.save()
+        return Response(status=status.HTTP_201_CREATED)
+
+
+class ContractSolutions(APIView):
+    """To create and assign multiple services and poses to a contract"""
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        contract = get_object_or_404(models.Contract, pk=pk)
+        for i in request.data['services']:
+            service = get_object_or_404(models.VirtualService, pk=i['id'])
+            serviceContract = models.ContractService.objects.create(contract=contract, service=service, 
+                                                                    price=i['price'], cost=i['cost'],
+                                                                    created_by=request.user)
+            serviceContract.save()
+        for i in request.data['poses']:
+            pos = get_object_or_404(models.POS, pk=i['id'])
+            posContract = models.ContractPOS.objects.create(contract=contract, pos=pos, 
+                                                                    price=i['price'], hardware_cost=i['hardware_cost'],
+                                                                    software_cost=i['software_cost'], created_by=request.user)
+            posContract.save()
+        return Response(status=status.HTTP_201_CREATED)
+
+
+class CustomerFileAPIVIew(generics.UpdateAPIView, generics.RetrieveAPIView):
+    serializer_class = serializers.CustomerFileSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+    queryset = models.Costumer
+
+    def get_object(self):
+        """Retrieve and return the customer admin"""
+        pk = self.kwargs.get('pk')
+        contract = get_object_or_404(models.Contract, pk=pk)
+        customer = get_object_or_404(models.Costumer, pk=contract.costumer.id)
+        return customer
+
+
+class ContractFileAPIVIew(generics.UpdateAPIView, generics.RetrieveAPIView):
+    serializer_class = serializers.ContractFileSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+    queryset = models.Costumer
+
+    def get_object(self):
+        """Retrieve and return the customer admin"""
+        pk = self.kwargs.get('pk')
+        contract = get_object_or_404(models.Contract, pk=pk)
+        return contract
+
+
+class ContractServiceUpdate(generics.UpdateAPIView):
+    """To update the price or cost of a service in a contract"""
+    serializer_class = serializers.ContractServiceSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+    queryset = models.ContractService
+
+    def get_object(self):
+        """Retrieve and return the contract-services"""
+        pk = self.kwargs.get('pk')
+        contractService = get_object_or_404(models.ContractService, pk=pk)
+        return contractService
+
+
+class ContractPosUpdate(generics.UpdateAPIView):
+    """To update the price or cost of a service in a contract"""
+    serializer_class = serializers.ContractPosSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+    queryset = models.ContractPOS
+
+    def get_object(self):
+        """Retrieve and return the contract-pos"""
+        pk = self.kwargs.get('pk')
+        contractPos = get_object_or_404(models.ContractPOS, pk=pk)
+        return contractPos

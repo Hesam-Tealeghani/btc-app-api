@@ -10,5 +10,7 @@ urlpatterns = [
     path('me/', views.ManageUserView.as_view(), name='me'),
     path('promote/<int:pk>/', views.PromotingAdmin.as_view(), name='promote'),
     path('deactive/<int:pk>/', views.DeactiveAdmin.as_view(), name='deactive'),
-    path('profile/<int:pk>/', views.AdminProfileAPIView.as_view(), name='profile')
+    path('profile/<int:pk>/', views.AdminProfileAPIView.as_view(), name='profile'),
+    path('me/picture/', views.ChangePictureAPIView.as_view(), name='profile-picture'),
+    path('me/changepassword/', views.ChangePassword.as_view(), name='change-password')
 ]
